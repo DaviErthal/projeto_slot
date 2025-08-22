@@ -6,14 +6,6 @@ import matplotlib.pyplot as plt
 
 # --- GAME CONFIGURATION (from your optimized results) ---
 
-##### Here using a less volatile config
-# GAME_CONFIG = {
-#     'symbols': ['W', 'B', 'T', 'O', 'C', 'S', 'L'],
-#     'weights': [4, 4, 9, 22, 27, 18, 23],
-#     'paytable': {
-#         'W': 250, 'B': 50, 'T': 25, 'O': 20, 'C': 15, 'S': 12, 'L': 8,
-#     }
-# }
 ##### Configuração do Tigrinho
 GAME_CONFIG = {
     'symbols': ['W', 'B', 'T', 'O', 'C', 'S', 'L'],
@@ -66,71 +58,102 @@ class SlotMachine3x3:
         return total_win
 
 # --- SIMULATION LOGIC ---
-def run_player_simulations(config, num_players, num_spins, initial_balance):
-    """Simulates multiple players and returns their balance histories."""
-    print("Running simulations...")
+def run_player_simulations(config, num_players, max_spins, initial_balance):
+    """
+    Simulates multiple players, each with a unique 'cash-out' strategy,
+    and calculates the total house profit.
+    """
+    print("Running simulations with player strategies...")
     start_time = time.time()
     
     machine = SlotMachine3x3(config)
     all_player_histories = []
     bet_per_spin = len(machine.paylines) * 1  # Assuming $1 per line
+    
+    winners = 0
+    bankrupts = 0
+    # NEW: Variable to track the house's earnings
+    house_net_profit = 0.0
 
     for i in range(num_players):
         balance = initial_balance
         history = [balance]
-        for _ in range(num_spins):
+        
+        target_balance = initial_balance * random.uniform(1.5, 3.0)
+
+        for _ in range(max_spins):
             if balance < bet_per_spin:
-                balance = 0  # Player is bankrupt
-            else:
-                balance -= bet_per_spin
-                grid = machine.spin()
-                win = machine.calculate_wins(grid)
-                balance += win
+                # NEW: Player goes bankrupt, house keeps the initial deposit
+                house_net_profit += initial_balance
+                balance = 0
+                bankrupts += 1
+                break
+            
+            if balance >= target_balance:
+                # NEW: Player wins, house pays out the player's profit
+                player_profit = balance - initial_balance
+                house_net_profit -= player_profit
+                winners += 1
+                break
+
+            balance -= bet_per_spin
+            grid = machine.spin()
+            win = machine.calculate_wins(grid)
+            balance += win
             history.append(balance)
+        
+        final_balance = history[-1]
+        while len(history) < max_spins + 1:
+            history.append(final_balance)
+            
         all_player_histories.append(history)
         
     duration = time.time() - start_time
-    print(f"Simulation for {num_players} players completed in {duration:.2f} seconds.")
+    print(f"Simulation completed in {duration:.2f} seconds.")
+    print(f"--- Outcome Summary ---")
+    print(f"Players who hit their target: {winners}")
+    print(f"Players who went bankrupt:    {bankrupts}")
+    print(f"Total House Net Profit:       ${house_net_profit:,.2f}")
+    
     return all_player_histories
 
 # --- VISUALIZATION LOGIC ---
-def plot_histories(histories, num_spins):
+def plot_histories(histories, max_spins):
     """Uses matplotlib to plot the balance histories of all players."""
     print("Generating plot...")
     
-    # Setup the plot style
     plt.style.use('dark_background')
     fig, ax = plt.subplots(figsize=(12, 7))
 
-    # Plot each player's history as a line on the graph
     for history in histories:
-        ax.plot(history, linewidth=1, alpha=0.7)
+        if history[-1] > history[0]:
+             ax.plot(history, linewidth=1, alpha=0.8, color='lime')
+        elif history[-1] <= 0:
+             ax.plot(history, linewidth=1, alpha=0.6, color='red')
+        else:
+             ax.plot(history, linewidth=1, alpha=0.6, color='gray')
 
-    # Formatting the chart
-    ax.set_title(f'Player Balance Over Time ({len(histories)} Players)', fontsize=16)
+    ax.set_title(f'Player Balance Over Time with Strategies ({len(histories)} Players)', fontsize=16)
     ax.set_xlabel('Number of Spins', fontsize=12)
     ax.set_ylabel('Balance ($)', fontsize=12)
     ax.grid(True, which='both', linestyle='--', linewidth=0.5, color='gray')
-    ax.set_xlim(0, num_spins)
-    ax.set_ylim(bottom=0) # Start y-axis at 0
+    ax.set_xlim(0, max_spins)
+    ax.set_ylim(bottom=0)
 
-    # Show the plot
     plt.show()
 
 # --- MAIN EXECUTION ---
 if __name__ == "__main__":
     # --- Simulation Settings ---
     NUM_PLAYERS = 500
-    SPINS_PER_PLAYER = 20000
-    INITIAL_BALANCE = 500
+    MAX_SPINS_PER_PLAYER = 10000
+    INITIAL_BALANCE = 2500
     
-    # 1. Run the simulation to get the data
     player_data = run_player_simulations(
         config=GAME_CONFIG,
         num_players=NUM_PLAYERS,
-        num_spins=SPINS_PER_PLAYER,
+        max_spins=MAX_SPINS_PER_PLAYER,
         initial_balance=INITIAL_BALANCE
     )
     
-    # 2. Plot the results
-    plot_histories(player_data, SPINS_PER_PLAYER)
+    plot_histories(player_data, MAX_SPINS_PER_PLAYER)
